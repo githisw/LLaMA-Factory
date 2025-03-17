@@ -5,7 +5,7 @@ This project is an extension of [LLaMA-Factory](https://github.com/hiyouga/LLaMA
 ## Overview of New Features
 
 - **DeepSpeed-Ulysses Sequence Parallelism**: Supports splitting input tensors along the sequence dimension, with each GPU processing only a portion of the sequence, significantly reducing memory requirements
-- **Ultra-long Sequence Training**: Supports training sequences up to 1 million tokens (equivalent to 10 complete Harry Potter books)
+- **Ultra-long Sequence Training**: Supports training sequences up to millions tokens 
 - **Efficient Communication**: Uses communication-efficient all-to-all collectives for distributed attention computation, reducing communication overhead
 - **FlashAttention Integration**: Combined with FlashAttention for further computational efficiency
 - **PyTorch 2.6 Compatibility**: Resolves deserialization security restriction issues in PyTorch 2.6
