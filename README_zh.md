@@ -4,8 +4,7 @@
 
 ## 新增功能概述
 
-- **DeepSpeed-Ulysses序列并行**：支持沿序列维度分割输入张量，每个GPU只处理部分序列，显著降低内存需求
-- **超长序列训练**：支持训练长达100万token的序列（相当于10本完整的《哈利波特》）
+- **DeepSpeed-Ulysses序列并行**：支持沿序列维度分割输入张量，显著降低内存需求，支持训练长达百万token的序列
 - **高效通信**：使用通信高效的all-to-all集合进行分布式注意力计算，减少通信开销
 - **FlashAttention集成**：与FlashAttention结合使用，进一步提高计算效率
 - **PyTorch 2.6兼容性**：解决了PyTorch 2.6中的反序列化安全限制问题
@@ -127,17 +126,9 @@ pip install "deepspeed>=0.10.2"
 安装FlashAttention（必需）：
 
 ```bash
-# 安装triton
-git clone -b legacy-backend https://github.com/openai/triton
-cd triton/python/
-pip install cmake
-pip install .
-
-# 安装FlashAttention
-cd ${WORK_DIR}
-git clone -b v1.0.4 https://github.com/HazyResearch/flash-attention
-cd flash-attention
-python -m pip install .
+# 安装triton和FlashAttention
+pip install triton
+pip install flash-attn
 ```
 
 ### 2. 使用启动脚本进行训练
@@ -169,10 +160,8 @@ python train_with_ulysses.py examples/train_lora/llama3_lora_dpo_ulysses.yaml
 
 ## 参考资料
 
-- [DeepSpeed-Ulysses博客](https://www.deepspeed.ai/2023/10/19/ulysses.html)
-- [DeepSpeed文档](https://www.deepspeed.ai/docs/)
+- [DeepSpeed-Ulysses教程](https://github.com/deepspeedai/DeepSpeed/blob/master/blogs/deepspeed-ulysses/chinese/README.md)
 - [FlashAttention文档](https://github.com/HazyResearch/flash-attention)
-- [长上下文训练技术](https://github.com/feifeibear/long-context-attention)
 
 ## 致谢
 

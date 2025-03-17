@@ -127,17 +127,9 @@ pip install "deepspeed>=0.10.2"
 Install FlashAttention (required):
 
 ```bash
-# Install triton
-git clone -b legacy-backend https://github.com/openai/triton
-cd triton/python/
-pip install cmake
-pip install .
-
-# Install FlashAttention
-cd ${WORK_DIR}
-git clone -b v1.0.4 https://github.com/HazyResearch/flash-attention
-cd flash-attention
-python -m pip install .
+# Install triton and FlashAttention
+pip install triton
+pip install flash-attn
 ```
 
 ### 2. Training with Launch Script
@@ -169,10 +161,8 @@ To customize the sequence parallel size, modify the `sequence_parallel_size` par
 
 ## References
 
-- [DeepSpeed-Ulysses Blog](https://www.deepspeed.ai/2023/10/19/ulysses.html)
-- [DeepSpeed Documentation](https://www.deepspeed.ai/docs/)
+- [DeepSpeed-Ulysses Tutorial](https://github.com/deepspeedai/DeepSpeed/blob/master/blogs/deepspeed-ulysses/chinese/README.md)
 - [FlashAttention Documentation](https://github.com/HazyResearch/flash-attention)
-- [Long Context Training Techniques](https://github.com/feifeibear/long-context-attention)
 
 ## Acknowledgements
 
