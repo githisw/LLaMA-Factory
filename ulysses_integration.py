@@ -227,16 +227,17 @@ def wrap_attention_with_ulysses_attention(model):
     
     return model
 
-# 修改DPO训练器以支持DeepSpeed-Ulysses
-def patch_dpo_trainer(trainer_class):
+# 通用的训练器修补函数
+def patch_trainer(trainer_class, has_ref_model=False):
     """
-    修补DPO训练器以支持DeepSpeed-Ulysses
+    通用的训练器修补函数，支持各种训练类型
     
     Args:
-        trainer_class: 原始的DPO训练器类
+        trainer_class: 原始的训练器类
+        has_ref_model: 训练器是否有参考模型（如DPO、PPO等）
         
     Returns:
-        修补后的DPO训练器类
+        修补后的训练器类
     """
     original_init = trainer_class.__init__
     
@@ -262,21 +263,111 @@ def patch_dpo_trainer(trainer_class):
                     
                     # 修改模型以使用Ulysses注意力
                     self.model = wrap_attention_with_ulysses_attention(self.model)
-                    if self.ref_model is not None:
+                    
+                    # 如果有参考模型，也修改参考模型
+                    if has_ref_model and hasattr(self, "ref_model") and self.ref_model is not None:
                         self.ref_model = wrap_attention_with_ulysses_attention(self.ref_model)
+                    
+                    # 对于PPO训练器，还需要修改奖励模型
+                    if hasattr(self, "reward_model") and self.reward_model is not None:
+                        self.reward_model = wrap_attention_with_ulysses_attention(self.reward_model)
     
     # 替换__init__方法
     trainer_class.__init__ = patched_init
     
     return trainer_class
 
+# 修改DPO训练器以支持DeepSpeed-Ulysses
+def patch_dpo_trainer(trainer_class):
+    """
+    修补DPO训练器以支持DeepSpeed-Ulysses
+    
+    Args:
+        trainer_class: 原始的DPO训练器类
+        
+    Returns:
+        修补后的DPO训练器类
+    """
+    return patch_trainer(trainer_class, has_ref_model=True)
+
+# 修改SFT训练器以支持DeepSpeed-Ulysses
+def patch_sft_trainer(trainer_class):
+    """
+    修补SFT训练器以支持DeepSpeed-Ulysses
+    
+    Args:
+        trainer_class: 原始的SFT训练器类
+        
+    Returns:
+        修补后的SFT训练器类
+    """
+    return patch_trainer(trainer_class, has_ref_model=False)
+
+# 修改PT训练器以支持DeepSpeed-Ulysses
+def patch_pt_trainer(trainer_class):
+    """
+    修补PT训练器以支持DeepSpeed-Ulysses
+    
+    Args:
+        trainer_class: 原始的PT训练器类
+        
+    Returns:
+        修补后的PT训练器类
+    """
+    return patch_trainer(trainer_class, has_ref_model=False)
+
+# 修改PPO训练器以支持DeepSpeed-Ulysses
+def patch_ppo_trainer(trainer_class):
+    """
+    修补PPO训练器以支持DeepSpeed-Ulysses
+    
+    Args:
+        trainer_class: 原始的PPO训练器类
+        
+    Returns:
+        修补后的PPO训练器类
+    """
+    return patch_trainer(trainer_class, has_ref_model=True)
+
+# 修改KTO训练器以支持DeepSpeed-Ulysses
+def patch_kto_trainer(trainer_class):
+    """
+    修补KTO训练器以支持DeepSpeed-Ulysses
+    
+    Args:
+        trainer_class: 原始的KTO训练器类
+        
+    Returns:
+        修补后的KTO训练器类
+    """
+    return patch_trainer(trainer_class, has_ref_model=True)
+
+# 修改RM训练器以支持DeepSpeed-Ulysses
+def patch_rm_trainer(trainer_class):
+    """
+    修补RM训练器以支持DeepSpeed-Ulysses
+    
+    Args:
+        trainer_class: 原始的RM训练器类
+        
+    Returns:
+        修补后的RM训练器类
+    """
+    return patch_trainer(trainer_class, has_ref_model=False)
+
 # 使用示例
 """
 from src.llamafactory.train.dpo.trainer import CustomDPOTrainer
-from ulysses_integration import patch_dpo_trainer
+from src.llamafactory.train.sft.trainer import CustomSeq2SeqTrainer
+from src.llamafactory.train.pt.trainer import CustomTrainer
+from src.llamafactory.train.ppo.trainer import CustomPPOTrainer
+from ulysses_integration import patch_dpo_trainer, patch_sft_trainer, patch_pt_trainer, patch_ppo_trainer
 
-# 修补DPO训练器
+# 修补各种训练器
 CustomDPOTrainer = patch_dpo_trainer(CustomDPOTrainer)
+CustomSeq2SeqTrainer = patch_sft_trainer(CustomSeq2SeqTrainer)
+CustomTrainer = patch_pt_trainer(CustomTrainer)
+CustomPPOTrainer = patch_ppo_trainer(CustomPPOTrainer)
 
 # 然后正常使用修补后的训练器
 """

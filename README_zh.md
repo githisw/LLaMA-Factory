@@ -138,6 +138,33 @@ pip install flash-attn
 ```bash
 python train_with_ulysses.py examples/train_lora/llama3_lora_dpo_ulysses.yaml
 ```
+#### 多节点分布式训练
+
+对于大型模型（如32B及以上），可以使用多节点分布式训练：
+
+```bash
+# 在主节点上运行
+NODE_RANK=0 MASTER_ADDR=<主节点IP> MASTER_PORT=29500 torchrun \
+    --nproc_per_node=8 \
+    --nnodes=2 \
+    --node_rank=0 \
+    --master_addr=<主节点IP> \
+    --master_port=29500 \
+    train_with_ulysses.py \
+    --deepspeed examples/deepspeed/ds_z3_ulysses_config.json \
+    ... 其他参数 ...
+
+# 在从节点上运行
+NODE_RANK=1 MASTER_ADDR=<主节点IP> MASTER_PORT=29500 torchrun \
+    --nproc_per_node=8 \
+    --nnodes=2 \
+    --node_rank=1 \
+    --master_addr=<主节点IP> \
+    --master_port=29500 \
+    train_with_ulysses.py \
+    --deepspeed examples/deepspeed/ds_z3_ulysses_config.json \
+    ... 其他参数 ...
+```
 
 ### 3. 自定义序列并行大小
 
@@ -151,6 +178,8 @@ python train_with_ulysses.py examples/train_lora/llama3_lora_dpo_ulysses.yaml
 ```
 
 ## 注意事项
+
+对于分布式训练，确保序列并行大小能被总GPU数量整除。例如，如果使用16个GPU（2节点×8 GPU/节点），可以设置序列并行大小为2、4、8或16。
 
 1. 序列并行大小必须能够被总GPU数量整除
 2. 注意力头的数量应该能被序列并行大小整除，以获得最佳性能

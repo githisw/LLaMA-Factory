@@ -3,6 +3,7 @@
 
 """
 使用DeepSpeed-Ulysses进行DPO训练的启动脚本
+支持单节点和多节点分布式训练，优化了PyTorch 2.6反序列化问题
 """
 
 import os
@@ -19,6 +20,8 @@ try:
     from deepspeed.runtime.config import DeepSpeedConfig
     from deepspeed.runtime.zero.stage3 import DeepSpeedZeroOptimizer_Stage3
     from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+    from deepspeed.runtime.engine import DeepSpeedEngine
+    from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
     
     # 添加到安全全局列表
     safe_classes = [
@@ -26,7 +29,9 @@ try:
         LossScaler,
         DeepSpeedConfig,
         DeepSpeedZeroOptimizer_Stage3,
-        ZeroParamStatus
+        ZeroParamStatus,
+        DeepSpeedEngine,
+        get_fp32_state_dict_from_zero_checkpoint
     ]
     
     # 尝试导入更多可能需要的类
@@ -39,6 +44,18 @@ try:
     try:
         from deepspeed.runtime.activation_checkpointing.checkpointing import CheckpointFunction
         safe_classes.append(CheckpointFunction)
+    except ImportError:
+        pass
+    
+    try:
+        from deepspeed.runtime.pipe.engine import PipelineEngine
+        safe_classes.append(PipelineEngine)
+    except ImportError:
+        pass
+    
+    try:
+        from deepspeed.runtime.pipe.module import PipelineModule
+        safe_classes.append(PipelineModule)
     except ImportError:
         pass
     
@@ -62,11 +79,16 @@ except (ImportError, AttributeError) as e:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 导入Ulysses集成模块
-from ulysses_integration import (
-    patch_dpo_trainer,
-    get_sequence_parallel_rank,
-    get_sequence_parallel_world_size
-)
+try:
+    from ulysses_integration import (
+        patch_dpo_trainer,
+        get_sequence_parallel_rank,
+        get_sequence_parallel_world_size,
+        initialize_sequence_parallel
+    )
+except ImportError:
+    print("Warning: Could not import ulysses_integration module. Make sure it exists in the current directory.")
+    sys.exit(1)
 
 # 导入LLaMA-Factory的模块
 from src.llamafactory.train.dpo.trainer import CustomDPOTrainer
@@ -157,6 +179,28 @@ def main():
     # 检查是否是DPO训练
     if finetuning_args.stage != "dpo":
         logger.warning(f"Current stage is {finetuning_args.stage}, not dpo. Ulysses may not work properly.")
+    
+    # 手动初始化序列并行组（针对分布式环境优化）
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+        rank = dist.get_rank()
+        
+        # 从DeepSpeed配置文件中读取序列并行大小
+        import json
+        with open(training_args.deepspeed, "r") as f:
+            ds_config = json.load(f)
+        
+        sequence_parallel_size = ds_config.get("sequence_parallel_size", 2)
+        logger.info(f"Initializing sequence parallel with size {sequence_parallel_size} for distributed training...")
+        
+        # 确保序列并行大小能被总GPU数量整除
+        if world_size % sequence_parallel_size != 0:
+            logger.warning(f"World size ({world_size}) is not divisible by sequence parallel size ({sequence_parallel_size}). Adjusting to {world_size}.")
+            sequence_parallel_size = world_size
+        
+        # 初始化序列并行组
+        initialize_sequence_parallel(world_size, rank, sequence_parallel_size)
+        logger.info(f"Sequence parallel initialized with world_size={world_size}, rank={rank}, sequence_parallel_size={sequence_parallel_size}")
     
     try:
         # 导入并运行训练函数
