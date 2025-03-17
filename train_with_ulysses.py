@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-使用DeepSpeed-Ulysses进行DPO训练的启动脚本
+使用DeepSpeed-Ulysses进行训练的启动脚本
+支持DPO、SFT、PT、PPO、KTO和RM等多种训练类型
 支持单节点和多节点分布式训练，优化了PyTorch 2.6反序列化问题
 """
 
@@ -82,6 +83,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from ulysses_integration import (
         patch_dpo_trainer,
+        patch_sft_trainer,
+        patch_pt_trainer,
+        patch_ppo_trainer,
+        patch_kto_trainer,
+        patch_rm_trainer,
         get_sequence_parallel_rank,
         get_sequence_parallel_world_size,
         initialize_sequence_parallel
@@ -91,11 +97,17 @@ except ImportError:
     sys.exit(1)
 
 # 导入LLaMA-Factory的模块
-from src.llamafactory.train.dpo.trainer import CustomDPOTrainer
-from src.llamafactory.train.dpo.workflow import run_dpo
 from src.llamafactory.hparams import get_train_args, read_args
 from src.llamafactory.extras import logging
 from src.llamafactory.data import PairwiseDataCollatorWithPadding
+
+# 根据训练类型导入相应的模块
+from src.llamafactory.train.dpo.trainer import CustomDPOTrainer
+from src.llamafactory.train.sft.trainer import CustomSeq2SeqTrainer
+from src.llamafactory.train.pt.trainer import CustomTrainer
+from src.llamafactory.train.ppo.trainer import CustomPPOTrainer
+from src.llamafactory.train.kto.trainer import CustomKTOTrainer
+from src.llamafactory.train.rm.trainer import PairwiseTrainer as CustomRMTrainer
 
 logger = logging.get_logger(__name__)
 
@@ -152,22 +164,6 @@ def main():
     # 解析命令行参数
     args = read_args()
     
-    # 修补DPO训练器以支持DeepSpeed-Ulysses
-    logger.info("Patching DPO trainer to support DeepSpeed-Ulysses...")
-    patched_trainer = patch_dpo_trainer(CustomDPOTrainer)
-    
-    # 修补数据收集器以支持序列长度分割
-    logger.info("Patching data collator to support sequence length splitting...")
-    patched_collator = patch_data_collator(PairwiseDataCollatorWithPadding)
-    
-    # 保存原始的类
-    original_trainer = sys.modules["src.llamafactory.train.dpo.trainer"].CustomDPOTrainer
-    original_collator = sys.modules["src.llamafactory.data"].PairwiseDataCollatorWithPadding
-    
-    # 替换类
-    sys.modules["src.llamafactory.train.dpo.trainer"].CustomDPOTrainer = patched_trainer
-    sys.modules["src.llamafactory.data"].PairwiseDataCollatorWithPadding = patched_collator
-    
     # 获取训练参数
     model_args, data_args, training_args, finetuning_args, _ = get_train_args(args)
     
@@ -176,9 +172,47 @@ def main():
         logger.warning("DeepSpeed configuration not specified. Using default Ulysses configuration.")
         training_args.deepspeed = "examples/deepspeed/ds_z3_ulysses_config.json"
     
-    # 检查是否是DPO训练
-    if finetuning_args.stage != "dpo":
-        logger.warning(f"Current stage is {finetuning_args.stage}, not dpo. Ulysses may not work properly.")
+    # 修补数据收集器以支持序列长度分割
+    logger.info("Patching data collator to support sequence length splitting...")
+    patched_collator = patch_data_collator(PairwiseDataCollatorWithPadding)
+    sys.modules["src.llamafactory.data"].PairwiseDataCollatorWithPadding = patched_collator
+    original_collator = sys.modules["src.llamafactory.data"].PairwiseDataCollatorWithPadding
+    
+    # 根据训练类型修补相应的训练器
+    stage = finetuning_args.stage
+    if stage == "dpo":
+        logger.info("Patching DPO trainer to support DeepSpeed-Ulysses...")
+        patched_trainer = patch_dpo_trainer(CustomDPOTrainer)
+        sys.modules["src.llamafactory.train.dpo.trainer"].CustomDPOTrainer = patched_trainer
+        original_trainer = sys.modules["src.llamafactory.train.dpo.trainer"].CustomDPOTrainer
+    elif stage == "sft":
+        logger.info("Patching SFT trainer to support DeepSpeed-Ulysses...")
+        patched_trainer = patch_sft_trainer(CustomSeq2SeqTrainer)
+        sys.modules["src.llamafactory.train.sft.trainer"].CustomSeq2SeqTrainer = patched_trainer
+        original_trainer = sys.modules["src.llamafactory.train.sft.trainer"].CustomSeq2SeqTrainer
+    elif stage == "pt":
+        logger.info("Patching PT trainer to support DeepSpeed-Ulysses...")
+        patched_trainer = patch_pt_trainer(CustomTrainer)
+        sys.modules["src.llamafactory.train.pt.trainer"].CustomTrainer = patched_trainer
+        original_trainer = sys.modules["src.llamafactory.train.pt.trainer"].CustomTrainer
+    elif stage == "ppo":
+        logger.info("Patching PPO trainer to support DeepSpeed-Ulysses...")
+        patched_trainer = patch_ppo_trainer(CustomPPOTrainer)
+        sys.modules["src.llamafactory.train.ppo.trainer"].CustomPPOTrainer = patched_trainer
+        original_trainer = sys.modules["src.llamafactory.train.ppo.trainer"].CustomPPOTrainer
+    elif stage == "kto":
+        logger.info("Patching KTO trainer to support DeepSpeed-Ulysses...")
+        patched_trainer = patch_kto_trainer(CustomKTOTrainer)
+        sys.modules["src.llamafactory.train.kto.trainer"].CustomKTOTrainer = patched_trainer
+        original_trainer = sys.modules["src.llamafactory.train.kto.trainer"].CustomKTOTrainer
+    elif stage == "rm":
+        logger.info("Patching RM trainer to support DeepSpeed-Ulysses...")
+        patched_trainer = patch_rm_trainer(CustomRMTrainer)
+        sys.modules["src.llamafactory.train.rm.trainer"].PairwiseTrainer = patched_trainer
+        original_trainer = sys.modules["src.llamafactory.train.rm.trainer"].PairwiseTrainer
+    else:
+        logger.warning(f"Unknown stage: {stage}. Ulysses may not work properly.")
+        original_trainer = None
     
     # 手动初始化序列并行组（针对分布式环境优化）
     if dist.is_initialized():
@@ -208,7 +242,20 @@ def main():
         run_exp(args)
     finally:
         # 恢复原始的类
-        sys.modules["src.llamafactory.train.dpo.trainer"].CustomDPOTrainer = original_trainer
+        if stage == "dpo" and original_trainer is not None:
+            sys.modules["src.llamafactory.train.dpo.trainer"].CustomDPOTrainer = original_trainer
+        elif stage == "sft" and original_trainer is not None:
+            sys.modules["src.llamafactory.train.sft.trainer"].CustomSeq2SeqTrainer = original_trainer
+        elif stage == "pt" and original_trainer is not None:
+            sys.modules["src.llamafactory.train.pt.trainer"].CustomTrainer = original_trainer
+        elif stage == "ppo" and original_trainer is not None:
+            sys.modules["src.llamafactory.train.ppo.trainer"].CustomPPOTrainer = original_trainer
+        elif stage == "kto" and original_trainer is not None:
+            sys.modules["src.llamafactory.train.kto.trainer"].CustomKTOTrainer = original_trainer
+        elif stage == "rm" and original_trainer is not None:
+            sys.modules["src.llamafactory.train.rm.trainer"].PairwiseTrainer = original_trainer
+        
+        # 恢复数据收集器
         sys.modules["src.llamafactory.data"].PairwiseDataCollatorWithPadding = original_collator
 
 if __name__ == "__main__":
