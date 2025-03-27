@@ -2,6 +2,29 @@
 
 This project is an enhanced professional version of [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) with DeepSpeed-Ulysses sequence parallel technology, enabling efficient training of large language models with ultra-long sequences. This Pro version features a modular design and advanced gradient optimization techniques.
 
+## Update records
+
+### 2025-03-27 Optimized Gradient Handling Strategy
+
+- **Changes Made**:
+  1. Reduced gradient noise: Decreased `noise_scale` from `5e-3` to `1e-4` (50x reduction)
+  2. Added late-stage training intervention reduction logic:
+     - Uses minimal noise (`1e-5`) during the last 10% of training steps
+     - Applies smaller gradient scaling factor in late stages (`1.1` instead of `1.5`)
+     - Disables temporary learning rate increases during late training stages
+
+- **Rationale**:
+  - Reduces significant fluctuations in loss and rewards/accuracies during convergence
+  - Allows the model to stabilize around optimal solutions rather than oscillating dramatically
+  - Maintains exploration capabilities in early training while improving stability in later stages
+
+- **Modified Files**:
+  - `handle_gradients_func` function in `ulysses_enchanced_pro/trainer_patching.py`
+
+- **Scope of Impact**:
+  - Applies to all training types (SFT, DPO, PT, PPO, KTO, and RM)
+  - Expected to improve final model performance and stability by reducing training noise and optimizing late-stage training strategy
+
 ## Overview of New Features
 
 - **DeepSpeed-Ulysses Sequence Parallelism**: Supports splitting input tensors along the sequence dimension, with each GPU processing only a portion of the sequence, significantly reducing memory requirements

@@ -37,6 +37,10 @@ def handle_gradients_func(trainer):
     if not gradients:
         return
     
+    # 获取当前训练步数和总步数
+    current_step = trainer.state.global_step if hasattr(trainer, 'state') and hasattr(trainer.state, 'global_step') else 0
+    total_steps = trainer.args.max_steps if hasattr(trainer, 'args') and hasattr(trainer.args, 'max_steps') else 1000
+    
     # 计算梯度的平均值和标准差
     grad_mean = torch.mean(torch.stack([torch.mean(torch.abs(g)) for g in gradients]))
     grad_std = torch.std(torch.stack([torch.std(g) for g in gradients]))
@@ -45,21 +49,33 @@ def handle_gradients_func(trainer):
     if grad_mean < 1e-3:  # 提高阈值，使检测更敏感
         logger.warning(f"检测到梯度可能消失: mean={grad_mean:.6f}, std={grad_std:.6f}")
         
-        # 策略1: 添加更大的梯度噪声，帮助模型跳出局部最小值
-        noise_scale = 5e-3  # 增加噪声大小
+        # 策略1: 添加梯度噪声，帮助模型跳出局部最小值
+        # 在训练后期（最后10%的步骤）减少噪声
+        if current_step > 0.9 * total_steps:
+            noise_scale = 1e-5  # 训练后期使用非常小的噪声
+            logger.info(f"训练后期（步骤 {current_step}/{total_steps}）：使用减小的噪声 {noise_scale}")
+        else:
+            noise_scale = 1e-4  # 降低噪声大小
+        
         for p in trainer.model.parameters():
             if p.grad is not None:
                 p.grad.add_(torch.randn_like(p.grad) * noise_scale)
         
         # 策略2: 梯度缩放，放大小梯度
-        scale_factor = 1.5  # 梯度缩放因子
+        # 在训练后期减少缩放
+        if current_step > 0.9 * total_steps:
+            scale_factor = 1.1  # 训练后期使用更小的缩放因子
+        else:
+            scale_factor = 1.5  # 梯度缩放因子
+            
         for p in trainer.model.parameters():
             if p.grad is not None:
                 if torch.mean(torch.abs(p.grad)) < 1e-4:
                     p.grad.mul_(scale_factor)
         
         # 策略3: 如果有学习率调度器，临时增加学习率
-        if hasattr(trainer, 'optimizer') and hasattr(trainer.optimizer, 'param_groups'):
+        # 在训练后期不调整学习率
+        if current_step <= 0.9 * total_steps and hasattr(trainer, 'optimizer') and hasattr(trainer.optimizer, 'param_groups'):
             for param_group in trainer.optimizer.param_groups:
                 if 'lr' in param_group:
                     # 记录原始学习率
