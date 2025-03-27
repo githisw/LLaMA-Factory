@@ -46,8 +46,14 @@ def handle_gradients_func(trainer):
     grad_std = torch.std(torch.stack([torch.std(g) for g in gradients]))
     
     # 检查梯度是否过小（梯度消失）
-    if grad_mean < 1e-3:  # 提高阈值，使检测更敏感
-        logger.warning(f"检测到梯度可能消失: mean={grad_mean:.6f}, std={grad_std:.6f}")
+    # 根据训练阶段动态调整阈值
+    if current_step > 0.9 * total_steps:
+        vanishing_threshold = 1e-5  # 训练后期使用更小的阈值
+    else:
+        vanishing_threshold = 1e-4  # 降低阈值，减少过度干预
+        
+    if grad_mean < vanishing_threshold:
+        logger.warning(f"检测到梯度可能消失: mean={grad_mean:.6f}, std={grad_std:.6f}, 阈值={vanishing_threshold}")
         
         # 策略1: 添加梯度噪声，帮助模型跳出局部最小值
         # 在训练后期（最后10%的步骤）减少噪声
